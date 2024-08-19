@@ -1,49 +1,33 @@
-import React, { useState } from 'react';
-import { AppBar, Toolbar, Typography, Button, Box, Container } from '@mui/material';
-import { Routes, Route, Link as RouterLink } from 'react-router-dom';
-import Lobby from './components/Lobby';
-import JoinGame from './components/JoinGame';
-import HostNameModal from './components/HostNameModal';
-import { PlayerRoleProvider } from './context/PlayerRoleContext'; // Ensure this is imported correctly
-
-function App() {
-    const [openModal, setOpenModal] = useState(false);
-
-    const handleOpenModal = () => {
-        setOpenModal(true);
-    };
-
-    const handleCloseModal = () => {
-        setOpenModal(false);
-    };
+import React from 'react';
+import {Routes, Route, Navigate, useNavigate} from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
+import { ProtectedRoute } from './components/ProtectedRoute';
+import Main from './pages/Main/Main';
+import Lobby from './pages/Lobby';
+import Game from './pages/Game';
+import GameStats from './pages/GameStats';
+import Layout from './components/Layout';
+import Login from "@/pages/Login";
+import { GameProvider } from './context/GameContext';
+const App: React.FC = () => {
+    const navigate = useNavigate();
 
     return (
-        <PlayerRoleProvider> {/* Make sure the entire app is wrapped with the provider */}
-            <Box className="App">
-                <AppBar position="static">
-                    <Toolbar>
-                        <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-                            Activity Game
-                        </Typography>
-                        <Button color="inherit" component={RouterLink} to="#" onClick={handleOpenModal}>
-                            Host a Game
-                        </Button>
-                        <Button color="inherit" component={RouterLink} to="/join">
-                            Join a Game
-                        </Button>
-                    </Toolbar>
-                </AppBar>
-                <Container maxWidth="md">
-                    <Routes>
-                        <Route path="/host" element={<Lobby />} />
-                        <Route path="/join" element={<JoinGame />} />
-                        <Route path="/lobby/:gameId" element={<Lobby />} />
-                    </Routes>
-                </Container>
-                <HostNameModal open={openModal} onClose={handleCloseModal} />
-            </Box>
-        </PlayerRoleProvider>
+        <AuthProvider>
+            <GameProvider>
+            <Layout>
+                <Routes>
+                    <Route path="/login" element={<Login />} />
+                    <Route path="/" element={<ProtectedRoute><Main /></ProtectedRoute>} />
+                    <Route path="/lobby/:gameId" element={<ProtectedRoute><Lobby /></ProtectedRoute>} />
+                    <Route path="/game/:gameId" element={<ProtectedRoute><Game /></ProtectedRoute>} />
+                    <Route path="/game-stats/:gameId" element={<ProtectedRoute><GameStats /></ProtectedRoute>} />
+                    <Route path="*" element={<Navigate to="/" />} />
+                </Routes>
+            </Layout>
+            </GameProvider>
+        </AuthProvider>
     );
-}
+};
 
 export default App;
