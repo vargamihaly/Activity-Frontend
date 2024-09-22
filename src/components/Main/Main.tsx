@@ -1,30 +1,48 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/context/AuthContext';
-import { useCreateGame, useGameDetails, useJoinGame } from "@/hooks/gameHooks";
-import { useToast } from "@/hooks/use-toast";
-import GameActionCard from "@/pages/Main/GameActionCard";
-import UserLoading from "@/pages/Main/UserLoading";
-import JoinGameDialog from "@/pages/Main/JoinGameDialog";
-import { useGame } from "@/context/GameContext";
-import { GameDetails, GameStatus } from "@/interfaces/GameTypes";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import React, {useEffect, useState} from 'react';
+import {useNavigate} from 'react-router-dom';
+import {useAuth} from '@/context/AuthContext';
+import {useCreateGame, useGameDetails, useJoinGame} from "@/hooks/gameHooks";
+import {useToast} from "@/hooks/use-toast";
+import GameActionCard from "@/components/Main/GameActionCard";
+import UserLoading from "@/components/Main/UserLoading";
+import JoinGameDialog from "@/components/Main/JoinGameDialog";
+import {useGame} from "@/context/GameContext";
+import {Button} from "@/components/ui/button";
+import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
+import {components} from "@/api/activitygame-schema";
+import {GAME_STATUS} from "@/interfaces/GameTypes";
 
 const Main: React.FC = () => {
+    type GameStatus = components["schemas"]["GameStatus"];
+
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const {user} = useAuth();
     const [joinGameId, setJoinGameId] = useState('');
     const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false);
-    const { currentGame, setCurrentGame, isInGame, setIsInGame } = useGame();
-    const { toast } = useToast();
+    const {currentGame, setCurrentGame, isInGame, setIsInGame} = useGame();
+    const {toast} = useToast();
 
     const createGameMutation = useCreateGame();
     const joinGameMutation = useJoinGame();
-    const storedGameId = localStorage.getItem('currentGameId');
-    const { data: fetchedGameDetails, isLoading: isLoadingGameDetails, error: gameDetailsError } = useGameDetails(storedGameId || undefined);
+    const storedGameId = localStorage.getItem('currentGameId') || undefined;
+    const {
+        data: fetchedGameDetails,
+        isLoading: isLoadingGameDetails,
+        error: gameDetailsError,
+        refetch: refetchGameDetails
+    } = useGameDetails(storedGameId, {
+        enabled: !!storedGameId,
+    });
+
+    console.log('Rendering Main component');
+    console.log('User:', user);
+    console.log('Is in game:', isInGame);
+    console.log('Current game:', currentGame);
 
     useEffect(() => {
+        console.log('useEffect triggered');
+        console.log('Stored game ID:', storedGameId);
+        console.log('Fetched game details:', fetchedGameDetails);
         if (storedGameId && !currentGame) {
             if (fetchedGameDetails) {
                 setCurrentGame(fetchedGameDetails);
@@ -47,28 +65,19 @@ const Main: React.FC = () => {
         }
 
         createGameMutation.mutate(undefined, {
-            onSuccess: (response) => {
+            onSuccess: async (response) => {
                 const gameId = response.data?.gameId;
+                console.log('Create game response:', response.data);
                 if (gameId) {
-                    setCurrentGame({ id: gameId, gameStatus: GameStatus.Waiting } as GameDetails);
-                    setIsInGame(true);
                     localStorage.setItem('currentGameId', gameId);
-                    navigate(`/lobby/${gameId}`);
-                } else {
-                    toast({
-                        title: "Error",
-                        description: "Game created but no ID returned. Please try again.",
-                        variant: "destructive",
-                    });
+                    const {data: newGameDetails} = await refetchGameDetails();
+                    if (newGameDetails) {
+                        setCurrentGame(newGameDetails);
+                        setIsInGame(true);
+                        navigate(`/lobby/${gameId}`);
+                    }
                 }
             },
-            onError: (error) => {
-                toast({
-                    title: "Error",
-                    description: `Failed to create game: ${error.message}`,
-                    variant: "destructive",
-                });
-            }
         });
     };
 
@@ -91,25 +100,21 @@ const Main: React.FC = () => {
         }
 
         joinGameMutation.mutate(joinGameId, {
-            onSuccess: () => {
-                setCurrentGame({ id: joinGameId, gameStatus: GameStatus.Waiting } as GameDetails);
-                setIsInGame(true);
+            onSuccess: async () => {
                 localStorage.setItem('currentGameId', joinGameId);
-                navigate(`/lobby/${joinGameId}`);
+                const {data: joinedGameDetails} = await refetchGameDetails();
+                if (joinedGameDetails) {
+                    setCurrentGame(joinedGameDetails);
+                    setIsInGame(true);
+                    navigate(`/lobby/${joinGameId}`);
+                }
             },
-            onError: () => {
-                toast({
-                    title: "Error",
-                    description: "Failed to join game. Please try again.",
-                    variant: "destructive",
-                });
-            }
         });
     };
 
     const handleReturnToGame = () => {
         if (currentGame) {
-            if (currentGame.gameStatus === GameStatus.InProgress) {
+            if (currentGame.status === GAME_STATUS.InProgress) {
                 navigate(`/game/${currentGame.id}`);
             } else {
                 navigate(`/lobby/${currentGame.id}`);
@@ -118,17 +123,23 @@ const Main: React.FC = () => {
     };
 
     if (!user) {
-        return <UserLoading />;
+        console.log('No user, rendering UserLoading');
+        return <UserLoading/>;
     }
 
     if (isLoadingGameDetails) {
+        console.log('Loading game details');
         return <div>Loading game details...</div>;
     }
 
+    console.log('Rendering main content');
+    console.log('User:', user);
+
     return (
         <div className="container mx-auto p-4">
+
             <div className="max-w-4xl mx-auto">
-                <h1 className="text-3xl font-bold text-center mb-8">Welcome, {user.username}!</h1>
+                <h1 className="text-3xl font-bold text-center mb-8">Welcome, {user.username}</h1>
 
                 {isInGame && currentGame && (
                     <Card className="mb-8">
@@ -137,7 +148,7 @@ const Main: React.FC = () => {
                         </CardHeader>
                         <CardContent>
                             <p>You are currently in a game (ID: {currentGame.id})</p>
-                            <p>Game Status: {GameStatus[currentGame.gameStatus]}</p>
+                            <p>Game Status: {currentGame.status}</p>
                             <Button onClick={handleReturnToGame} className="mt-4">
                                 Return to Game
                             </Button>

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useGame } from '@/context/GameContext';
 import { useStartGame, useGameDetails } from "@/hooks/gameHooks";
-import UpdateSettingsForm from "../components/forms/updateSettings/UpdateSettingsForm";
+import UpdateSettingsForm from "../forms/updateSettings/UpdateSettingsForm";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -12,7 +12,10 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Loader2, Settings, Star } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import useSSE from '@/hooks/useSSE';
-import { User } from '@/interfaces/GameTypes';
+import {components} from "@/api/activitygame-schema";
+
+type PlayerResponse = components['schemas']['PlayerResponse'];
+
 
 const Lobby: React.FC = () => {
     const { gameId } = useParams<{ gameId: string }>();
@@ -45,6 +48,7 @@ const Lobby: React.FC = () => {
             toast({
                 title: "Error",
                 description: "Please enter a valid game ID",
+                variant: "destructive",
             });
             return;
         }
@@ -72,7 +76,6 @@ const Lobby: React.FC = () => {
                 variant: "default",
             });
         } catch (err) {
-            console.error("Failed to copy: ", err);
             toast({
                 title: "Error",
                 description: "Failed to copy Game ID.",
@@ -111,20 +114,15 @@ const Lobby: React.FC = () => {
                     >
                         Game ID: {gameId}
                     </Badge>
-                    {!isConnected && (
-                        <Badge variant="destructive" className="mx-auto mt-2">
-                            Connecting...
-                        </Badge>
-                    )}
                 </CardHeader>
                 <CardContent>
                     <h2 className="text-xl font-semibold mb-4">Players:</h2>
                     {players.length > 0 ? (
                         <ul className="space-y-4">
-                            {players.map((player: User) => (
+                            {players.map((player: PlayerResponse) => (
                                 <li key={player.id} className="flex items-center space-x-4">
                                     <Avatar>
-                                        <AvatarFallback>{player.username[0]}</AvatarFallback>
+                                        <AvatarFallback>{player.username![0]}</AvatarFallback>
                                     </Avatar>
                                     <div>
                                         <p className="font-medium">

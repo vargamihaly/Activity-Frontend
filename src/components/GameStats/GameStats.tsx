@@ -5,7 +5,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Trophy, Clock, Target } from 'lucide-react';
-import { MethodType } from '@/interfaces/GameTypes';
+import {METHOD_TYPE} from "@/interfaces/GameTypes";
+
 
 const GameStats: React.FC = () => {
     const { gameId } = useParams<{ gameId: string }>();
@@ -23,7 +24,7 @@ const GameStats: React.FC = () => {
         return <div className="text-center text-red-500 p-4">Error loading game statistics</div>;
     }
 
-    const winner = gameDetails.players.reduce((prev, current) => (prev.score! > current.score!) ? prev : current);
+    const winner = gameDetails.players!.reduce((prev, current) => (prev.score! > current.score!) ? prev : current);
 
     return (
         <div className="container mx-auto p-4 max-w-4xl">
@@ -37,7 +38,7 @@ const GameStats: React.FC = () => {
                     </h2>
                     <div className="flex items-center bg-yellow-100 p-4 rounded-lg">
                         <Avatar className="h-12 w-12 mr-4">
-                            <AvatarFallback>{winner.username[0]}</AvatarFallback>
+                            <AvatarFallback>{winner.username![0]}</AvatarFallback>
                         </Avatar>
                         <div>
                             <p className="text-xl font-bold">{winner.username}</p>
@@ -57,7 +58,7 @@ const GameStats: React.FC = () => {
                         <li><strong>Game ID:</strong> {gameDetails.id}</li>
                         <li><strong>Max Score:</strong> {gameDetails.maxScore}</li>
                         <li><strong>Timer:</strong> {gameDetails.timer} minutes</li>
-                        <li><strong>Enabled Methods:</strong> {gameDetails.enabledMethods.map(method => MethodType[method]).join(', ')}</li>
+                        <li><strong>Enabled Methods:</strong> {gameDetails.enabledMethods!.map(method => METHOD_TYPE[method]).join(', ')}</li>
                     </ul>
                 </CardContent>
             </Card>
@@ -69,12 +70,12 @@ const GameStats: React.FC = () => {
                         Final Standings
                     </h2>
                     <ul className="space-y-4">
-                        {gameDetails.players.sort((a, b) => b.score! - a.score!).map((player, index) => (
+                        {gameDetails.players!.sort((a, b) => b.score! - a.score!).map((player, index) => (
                             <li key={player.id} className="flex items-center justify-between bg-secondary/10 p-3 rounded-lg">
                                 <div className="flex items-center">
                                     <span className="font-semibold mr-3">{index + 1}.</span>
                                     <Avatar className="h-10 w-10 mr-3">
-                                        <AvatarFallback>{player.username[0]}</AvatarFallback>
+                                        <AvatarFallback>{player.username![0]}</AvatarFallback>
                                     </Avatar>
                                     <span className="text-lg">{player.username}</span>
                                 </div>

@@ -1,10 +1,12 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { GameDetails } from '@/interfaces/GameTypes';
 import { useGameDetails } from '@/hooks/gameHooks';
+import {components} from "@/api/activitygame-schema";
+type GetGameDetailsResponse = components['schemas']['GetGameDetailsResponse'];
+
 
 interface GameContextType {
-    currentGame: GameDetails | null;
-    setCurrentGame: (game: GameDetails | null) => void;
+    currentGame: GetGameDetailsResponse | null;
+    setCurrentGame: (game: GetGameDetailsResponse | null) => void;
     isInGame: boolean;
     setIsInGame: (inGame: boolean) => void;
     refreshGameDetails: () => void;
@@ -13,18 +15,10 @@ interface GameContextType {
 const GameContext = createContext<GameContextType | undefined>(undefined);
 
 export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [currentGame, setCurrentGame] = useState<GameDetails | null>(null);
+    const [currentGame, setCurrentGame] = useState<GetGameDetailsResponse | null>(null);
     const [isInGame, setIsInGame] = useState<boolean>(false);
 
     const { data: gameDetails, refetch } = useGameDetails(isInGame ? localStorage.getItem('currentGameId') || undefined : undefined);
-
-    const clearCurrentGameId = () => {
-        localStorage.removeItem('currentGameId');
-    };
-
-    useEffect(() => {
-        clearCurrentGameId(); // Clear currentGameId when the application starts
-    }, []);
 
     useEffect(() => {
         const storedGameId = localStorage.getItem('currentGameId');

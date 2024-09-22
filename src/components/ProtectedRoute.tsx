@@ -6,20 +6,18 @@ export const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ childr
     const { user, loading } = useAuth();
     const location = useLocation();
 
+    console.log("ProtectedRoute: Rendering, user:", user, "loading:", loading);
+
     if (loading) {
-        // You can return a loading spinner or some other loading indicator here
+        console.log("ProtectedRoute: Still loading, showing loading indicator");
         return <div>Loading...</div>;
     }
 
     if (!user) {
-        // Redirect to login, but save the current location
+        console.log("ProtectedRoute: No user, redirecting to login");
         return <Navigate to="/login" state={{ from: location }} replace />;
     }
 
-    if (!user.username) {
-        // Redirect to set username, but save the current location
-        return <Navigate to="/set-username" state={{ from: location }} replace />;
-    }
-
+    console.log("ProtectedRoute: User authenticated, rendering children");
     return <>{children}</>;
 };
