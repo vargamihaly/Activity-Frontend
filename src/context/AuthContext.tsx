@@ -1,14 +1,25 @@
 import React, { createContext, ReactNode, useContext, useEffect, useState } from "react";
-import axios from "axios";
 import { useGoogleLogin } from "@react-oauth/google";
-import {User} from "@/interfaces/GameTypes";
+import { getMe, postLogout, postRegister, setAuthToken } from "@/api/games-api";
+import { useToast } from "@/hooks/use-toast";
+import {components} from "@/api/activitygame-schema";
+type UserResponseApiResponse = components["schemas"]["UserResponseApiResponse"];
+
+interface User {
+    email: string;
+    id: string;
+    isHost: boolean;
+    score: number;
+    username: string;
+}
+
 
 interface AuthContextType {
     user: User | null;
     loading: boolean;
     login: () => void;
     logout: () => void;
-    setHostStatus: (isHost: boolean) => void; // Function to set host status
+    setHostStatus: (isHost: boolean) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -16,53 +27,103 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
+    const { toast } = useToast();
 
     const setHostStatus = (isHost: boolean) => {
-        if (user) {
-            setUser(prevUser => ({ ...prevUser!, isHost })); // Update the user with host status
-        }
+        setUser(prevUser =>
+            prevUser ? { ...prevUser, data: { ...prevUser, isHost } } : null
+        );
     };
 
     const login = useGoogleLogin({
-        onSuccess: async (response) => {
+        onSuccess: async (tokenResponse) => {
             try {
-                const backendResponse = await axios.post('/api/Auth/register', null, {
-                    headers: {
-                        Authorization: `Bearer ${response.access_token}`
-                    }
-                });
-                setUser(backendResponse.data);
+                setAuthToken(tokenResponse.access_token);
+                const backendResponse = await postRegister();
+                console.log("Backend response:");
+                console.log(backendResponse);
+                const response = await getMe();
+                console.log("AuthProvider: getMe response", response.data);
+                console.log("AuthProvider1: getMe response", response);
+                const userData = (response as UserResponseApiResponse);
+                if (userData.success) {
+                    setUser(userData.data as User);
+                    toast({
+                        title: "Login Successful",
+                        description: "You have successfully logged in.",
+                        variant: "default"
+                    });
+                }
+                if (!userData.success) {
+                    console.log("Error registering user:", userData.message);
+                    setAuthToken(null);
+                    toast({
+                        title: "Login Failed",
+                        description: "An error occurred during login. Please try again.",
+                        variant: "destructive"
+                    });
+                }
             } catch (error) {
                 console.error('Error registering user:', error);
+                setAuthToken(null);
+                toast({
+                    title: "Login Failed",
+                    description: "An error occurred during login. Please try again.",
+                    variant: "destructive"
+                });
             }
         },
-        onError: (error) => console.error('Google Login Failed:', error),
+        onError: (error) => {
+            console.error('Google Login Failed:', error);
+            toast({
+                title: "Google Login Failed",
+                description: "An error occurred during Google login. Please try again.",
+                variant: "destructive"
+            });
+        },
     });
 
     const logout = async () => {
         try {
-            await axios.post('/api/Auth/logout');
+            await postLogout();
+            setUser(null);
+            setAuthToken(null);
+            toast({
+                title: "Logout Successful",
+                description: "You have been logged out successfully.",
+                variant: "default"
+            });
         } catch (error) {
             console.error('Error logging out:', error);
-        } finally {
-            setUser(null);
+            toast({
+                title: "Logout Error",
+                description: "An error occurred during logout. Please try again.",
+                variant: "destructive"
+            });
         }
     };
 
     useEffect(() => {
         const checkAuth = async () => {
+            console.log("AuthProvider: Checking authentication");
             setLoading(true);
             try {
-                const response = await axios.get('/api/Auth/me');
-                setUser(response.data);
+                const response = await getMe();
+                console.log("AuthProvider: getMe response", response.data);
+                setUser(response.data as User);
             } catch (error) {
+                console.error('AuthProvider: Error checking authentication:', error);
                 setUser(null);
+                setAuthToken(null);
             } finally {
                 setLoading(false);
+                console.log("AuthProvider: Authentication check complete, loading:", false);
             }
         };
         checkAuth();
     }, []);
+
+    console.log("AuthProvider: Rendering, user:", user, "loading:", loading);
 
     return (
         <AuthContext.Provider value={{ user, loading, login, logout, setHostStatus }}>

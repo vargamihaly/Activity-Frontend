@@ -1,139 +1,181 @@
-import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
-import {EndTurnRequest, UpdateGameSettingsRequest} from '@/interfaces/RequestTypes';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useToast } from "@/hooks/use-toast";
+import { components } from "@/api/activitygame-schema";
+
+import { AxiosError } from "axios";
 import {
-    StartGameResponse,
-    GameDetailsResponse,
-    EndTurnResponse,
-    CreateGameResponse, ApiResponse,
-} from '@/interfaces/ResponseTypes';
-import {mapGameDetailsResponseToGameDetails} from "@/utils/mappers";
-import {GameDetails} from "@/interfaces/GameTypes";
+    getGameDetails,
+    postCreateGame,
+    postEndTurn,
+    postStartGame,
+    putGameSettings,
+    postJoinGame,
+    postLeaveLobby
+} from "@/api/games-api";
 
-const API_URL = '/api/games';
+const errorMessageTitle = "An error occurred";
 
-
-const apiFetch = async <T,>(url: string, options: RequestInit = {}): Promise<ApiResponse<T>> => {
-    const response = await fetch(url, {
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers,
-        },
-        credentials: 'include',
-    });
-
-    const data: ApiResponse<T> = await response.json();
-
-    if (!response.ok || !data.success) {
-        throw new Error(data.message || response.statusText);
-    }
-
-    return data;
-};
+type CreateGameResponseApiResponse = components["schemas"]["CreateGameResponseApiResponse"];
+type UpdateGameSettingsRequest = components["schemas"]["UpdateGameSettingsRequest"];
+type ApiResponse = components["schemas"]["ApiResponse"];
+type StartGameResponseApiResponse = components["schemas"]["StartGameResponseApiResponse"];
+type GetGameDetailsResponse = components["schemas"]["GetGameDetailsResponse"];
+type EndTurnResponseApiResponse = components["schemas"]["EndTurnResponseApiResponse"];
+type EndTurnRequest = components["schemas"]["EndTurnRequest"];
 
 
 export const useCreateGame = () => {
     const queryClient = useQueryClient();
+    const { toast } = useToast();
 
-    return useMutation<ApiResponse<CreateGameResponse>, Error, void>({
-        mutationFn: async () => {
-            return await apiFetch<CreateGameResponse>(`${API_URL}/create`, { method: 'POST' });
-        },
-        onSuccess: async (data) => {
-            const gameId = data.data?.gameId;
-            if (gameId) {
-                await queryClient.invalidateQueries({
-                    queryKey: ['games', gameId]
-                });
+    return useMutation<CreateGameResponseApiResponse, AxiosError<ApiResponse>, void>({
+        mutationFn: postCreateGame,
+        onSuccess: async (response) => {
+            if (response.success){
+                const gameId = response.data?.gameId;
+                if (gameId) {
+                    await queryClient.invalidateQueries({
+                        queryKey: ['games', gameId]
+                    });
+                }
+                console.log('Game created successfully', response.data);
             }
-        }
-    });
-};
-
-
-// Join Game Mutation
-export const useJoinGame = () => {
-    const queryClient = useQueryClient();
-
-    return useMutation<ApiResponse<void>, Error, string>({
-        mutationFn: async (gameId: string) => {
-            return await apiFetch<void>(`${API_URL}/${gameId}/join`, { method: 'POST' });
         },
-        onSuccess: async (data, gameId) => {
-            await queryClient.invalidateQueries({
-                queryKey: ['games', gameId]
+        onError: (error) => {
+            console.error('Error creating game:', error);
+            const errorMessage = error.response?.data?.message || error.message || "An unexpected error occurred. Please try again.";
+            toast({
+                title: "An Error Occurred",
+                description: errorMessage,
+                variant: "destructive"
             });
         }
     });
 };
-
-// Update Game Settings Mutation
 
 export const useUpdateSettings = () => {
     const queryClient = useQueryClient();
+    const { toast } = useToast();
 
-    return useMutation<ApiResponse<void>, Error, { gameId: string; request: UpdateGameSettingsRequest }>({
-        mutationFn: async ({ gameId, request }) => {
-            return await apiFetch<void>(`${API_URL}/${gameId}/settings`, {
-                method: 'PUT',
-                body: JSON.stringify(request)
-            });
-        },
-        onSuccess: async (data, gameId) => {
+    return useMutation<ApiResponse, AxiosError<ApiResponse>, { gameId: string; request: UpdateGameSettingsRequest }>({
+        mutationFn: async ({ gameId, request }) => putGameSettings(gameId, request),
+        onSuccess: async (_, { gameId }) => {
             await queryClient.invalidateQueries({
                 queryKey: ['games', gameId]
+            });
+        },
+        onError: (error) => {
+            const errorMessage = error.response?.data?.message || error.message || "An unexpected error occurred.";
+            toast({ title: "Error", description: errorMessage, variant: "destructive" });
+        }
+    });
+};
+
+export const useLeaveLobby = () => {
+    const queryClient = useQueryClient();
+    const { toast } = useToast();
+
+    return useMutation<ApiResponse, AxiosError<ApiResponse>, string>({
+        mutationFn: postLeaveLobby,
+        onSuccess: async (response, gameId) => {
+            await queryClient.invalidateQueries({
+                queryKey: ['games', gameId]
+            });
+            console.log('Left lobby successfully', response);
+        },
+        onError: (error) => {
+            const errorMessage = error.response?.data?.message || error.message || "An unexpected error occurred while leaving the lobby.";
+            toast({
+                title: "Error Leaving Lobby",
+                description: errorMessage,
+                variant: "destructive"
             });
         }
     });
 };
 
-// Start Game Mutation
+export const useJoinGame = () => {
+    const queryClient = useQueryClient();
+    const { toast } = useToast();
+
+    return useMutation<ApiResponse, AxiosError<ApiResponse>, string>({
+        mutationFn: postJoinGame,
+        onSuccess: async (response, gameId) => {
+            await queryClient.invalidateQueries({
+                queryKey: ['games', gameId]
+            });
+            console.log('Joined game successfully', response);
+        },
+        onError: (error) => {
+            const errorMessage = error.response?.data?.message || error.message || "An unexpected error occurred while joining the game.";
+            toast({
+                title: "Error Joining Game",
+                description: errorMessage,
+                variant: "destructive"
+            });
+        }
+    });
+};
+
 export const useStartGame = () => {
     const queryClient = useQueryClient();
+    const { toast } = useToast();
 
-    return useMutation<ApiResponse<StartGameResponse>, Error, string>({
-        mutationFn: async (gameId: string) => {
-            return await apiFetch<StartGameResponse>(`${API_URL}/${gameId}/start`, { method: 'POST' });
-        },
-        onSuccess: async (data, gameId) => {
+    return useMutation<StartGameResponseApiResponse, AxiosError<ApiResponse>, string>({
+        mutationFn: postStartGame,
+        onSuccess: async (_, gameId) => {
             await queryClient.invalidateQueries({
                 queryKey: ['games', gameId]
             });
+        },
+        onError: (error) => {
+            const errorMessage = error.response?.data?.message || error.message || "An unexpected error occurred.";
+            toast({ title: errorMessageTitle, description: errorMessage });
+            throw error;
         }
     });
 };
 
-export const useGameDetails = (gameId: string | undefined) => {
-    return useQuery<GameDetails, Error>({
+//Should not be called directly for state manage the CURRENT game, use GameContext instead
+export const useGameDetails = (gameId?: string, options = {}) => {
+    const { toast } = useToast();
+
+    return useQuery<GetGameDetailsResponse, AxiosError<ApiResponse>>({
         queryKey: ['games', gameId],
-        queryFn: async (): Promise<GameDetails> => {
+        queryFn: async (): Promise<GetGameDetailsResponse> => {
             if (!gameId) {
                 throw new Error('Game ID is required');
             }
-            const response = await apiFetch<GameDetailsResponse>(`${API_URL}/${gameId}`, { method: 'GET' });
-            return mapGameDetailsResponseToGameDetails(response.data as GameDetailsResponse);
+
+            const response = await getGameDetails(gameId);
+
+            if (!response.data) {
+                const errorMessage = response.message || "Game details not found";
+                toast({ title: errorMessageTitle, description: errorMessage });
+                throw new Error(errorMessage);
+            }
+
+            return response.data;
         },
-        refetchInterval: 5000,
-        refetchOnWindowFocus: false,
-        enabled: !!gameId, // Only run the query if gameId is truthy
+        ...options,
     });
 };
 
-// End Turn Mutation
 export const useEndTurn = () => {
     const queryClient = useQueryClient();
+    const { toast } = useToast();
 
-    return useMutation<ApiResponse<EndTurnResponse>, Error, { gameId: string; request: EndTurnRequest }>({
-        mutationFn: async ({ gameId, request }) => {
-            return await apiFetch<EndTurnResponse>(`${API_URL}/${gameId}/end-turn`, {
-                method: 'POST',
-                body: JSON.stringify(request)
+    return useMutation<EndTurnResponseApiResponse, AxiosError<ApiResponse>, { gameId: string; request: EndTurnRequest }>({
+        mutationFn: async ({ gameId, request }) => postEndTurn(gameId, request),
+        onSuccess: async (_, { gameId }) => {
+            await queryClient.invalidateQueries({
+                queryKey: ['games', gameId],
             });
         },
-        onSuccess: async (data, { gameId }) => {
-            await queryClient.invalidateQueries({
-                queryKey: ['games', gameId]
-            });
-        }
+        onError: (error) => {
+            const errorMessage = error.response?.data?.message || error.message || "An unexpected error occurred.";
+            toast({ title: errorMessageTitle, description: errorMessage });
+            throw error;
+        },
     });
 };

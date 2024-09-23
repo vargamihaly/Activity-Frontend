@@ -1,27 +1,29 @@
-import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { useAuth } from '@/context/AuthContext';
-import { useGame } from '@/context/GameContext';
-import { useStartGame, useGameDetails } from "@/hooks/gameHooks";
-import UpdateSettingsForm from "../components/forms/updateSettings/UpdateSettingsForm";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Loader2, Settings, Star } from 'lucide-react';
-import { useToast } from "@/hooks/use-toast";
+import React, {useEffect, useState} from 'react';
+import {useParams, useNavigate} from 'react-router-dom';
+import {useAuth} from '@/context/AuthContext';
+import {useGame} from '@/context/GameContext';
+import {useStartGame, useLeaveLobby} from "@/hooks/gameHooks";
+import UpdateSettingsForm from "../forms/updateSettings/UpdateSettingsForm";
+import {Button} from "@/components/ui/button";
+import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
+import {Avatar, AvatarFallback} from "@/components/ui/avatar";
+import {Badge} from "@/components/ui/badge";
+import {Collapsible, CollapsibleContent, CollapsibleTrigger} from "@/components/ui/collapsible";
+import {Loader2, Settings, Star, LogOut} from 'lucide-react';
+import {useToast} from "@/hooks/use-toast";
 import useSSE from '@/hooks/useSSE';
-import { User } from '@/interfaces/GameTypes';
+import {components} from "@/api/activitygame-schema";
+
+type PlayerResponse = components['schemas']['PlayerResponse'];
 
 const Lobby: React.FC = () => {
-    const { gameId } = useParams<{ gameId: string }>();
-    const { user } = useAuth();
+    const {gameId} = useParams<{ gameId: string }>();
+    const {user, setHostStatus} = useAuth();
     const [showSettings, setShowSettings] = useState(false);
-    const { toast } = useToast();
-    const { isLoading, error } = useGameDetails(gameId!);
+    const {toast} = useToast();
     const startGameMutation = useStartGame();
-    const { currentGame, refreshGameDetails } = useGame();
+    const leaveLobbyMutation = useLeaveLobby();
+    const {currentGame, refreshGameDetails} = useGame();
     const navigate = useNavigate();
 
     const onGameStarted = () => {
@@ -32,7 +34,61 @@ const Lobby: React.FC = () => {
         navigate(`/game/${gameId}`);
     };
 
-    const { isConnected } = useSSE(gameId, onGameStarted);
+    const onPlayerLeftLobby = async (leftPlayerId: string) => {
+
+        await refreshGameDetails();
+
+        if (leftPlayerId === user?.id) {
+
+            //If this user was the host, remove his host status
+            setHostStatus(false);
+
+
+            let isLastUserLeaving = currentGame?.players && currentGame.players.length === 0;
+            if (isLastUserLeaving) {
+                // Handle game cancellation
+                toast({
+                    title: "Game Cancelled",
+                    description: "The game has been cancelled as there are no players left.",
+                });
+            } else {
+                toast({
+                    title: "You left the game",
+                    description: "Redirected to the main page.",
+                });
+            }
+            
+            navigate('/');
+            
+        } else {
+            // Another player left
+            toast({
+                title: "Player Left",
+                description: "A player has left the lobby.",
+            });
+        }
+
+        if (currentGame?.players && currentGame.players.length === 0) {
+            // Handle game cancellation
+            toast({
+                title: "Game Cancelled",
+                description: "The game has been cancelled as there are no players left.",
+            });
+            navigate('/');
+        }
+    };
+
+    const {isConnected, error} = useSSE(gameId, {onGameStarted, onPlayerLeftLobby});
+
+    useEffect(() => {
+        if (error) {
+            toast({
+                title: "Connection Error",
+                description: "There was an issue connecting to the game. We're trying to reconnect.",
+                variant: "destructive",
+            });
+        }
+    }, [error, toast]);
 
     useEffect(() => {
         if (gameId) {
@@ -45,6 +101,7 @@ const Lobby: React.FC = () => {
             toast({
                 title: "Error",
                 description: "Please enter a valid game ID",
+                variant: "destructive",
             });
             return;
         }
@@ -61,6 +118,24 @@ const Lobby: React.FC = () => {
         }
     };
 
+    const handleLeaveLobby = async () => {
+        if (!gameId) return;
+
+        try {
+            await leaveLobbyMutation.mutateAsync(gameId);
+            toast({
+                title: "Leaving game",
+                description: "Waiting for server confirmation...",
+            });
+        } catch (error) {
+            toast({
+                title: "Error",
+                description: "Failed to leave the lobby. Please try again.",
+                variant: "destructive"
+            });
+        }
+    };
+
     const onGameIdClicked = async () => {
         if (!gameId) return;
 
@@ -72,7 +147,6 @@ const Lobby: React.FC = () => {
                 variant: "default",
             });
         } catch (err) {
-            console.error("Failed to copy: ", err);
             toast({
                 title: "Error",
                 description: "Failed to copy Game ID.",
@@ -81,15 +155,7 @@ const Lobby: React.FC = () => {
         }
     };
 
-    if (isLoading) {
-        return (
-            <div className="flex justify-center items-center h-screen">
-                <Loader2 className="h-8 w-8 animate-spin"/>
-            </div>
-        );
-    }
-
-    if (error || !currentGame) {
+    if (!currentGame) {
         return <div>Error loading game details</div>;
     }
 
@@ -112,19 +178,19 @@ const Lobby: React.FC = () => {
                         Game ID: {gameId}
                     </Badge>
                     {!isConnected && (
-                        <Badge variant="destructive" className="mx-auto mt-2">
-                            Connecting...
-                        </Badge>
+                        <div className="text-yellow-500 text-center mt-2">
+                            Connecting to game events...
+                        </div>
                     )}
                 </CardHeader>
                 <CardContent>
                     <h2 className="text-xl font-semibold mb-4">Players:</h2>
                     {players.length > 0 ? (
                         <ul className="space-y-4">
-                            {players.map((player: User) => (
+                            {players.map((player: PlayerResponse) => (
                                 <li key={player.id} className="flex items-center space-x-4">
                                     <Avatar>
-                                        <AvatarFallback>{player.username[0]}</AvatarFallback>
+                                        <AvatarFallback>{player.username![0]}</AvatarFallback>
                                     </Avatar>
                                     <div>
                                         <p className="font-medium">
@@ -171,21 +237,30 @@ const Lobby: React.FC = () => {
                             </CollapsibleContent>
                         </Collapsible>
 
-                        {isHost && (
-                            <>
-                                <Button
-                                    onClick={handleStartGame}
-                                    className="w-full"
-                                    disabled={startGameMutation.isPending || players.length < 2}
-                                >
-                                    {startGameMutation.isPending ? 'Starting...' : 'Start Game'}
-                                </Button>
-                                {players.length < 2 && (
-                                    <p className="text-sm text-red-500 mt-2">
-                                        At least 2 players are required to start the game.
-                                    </p>
-                                )}
-                            </>
+                        {isHost ? (
+                            <Button
+                                onClick={handleStartGame}
+                                className="w-full"
+                                disabled={startGameMutation.isPending || players.length < 2}
+                            >
+                                {startGameMutation.isPending ? 'Starting...' : 'Start Game'}
+                            </Button>
+                        ) : (
+                            <Button
+                                onClick={handleLeaveLobby}
+                                className="w-full"
+                                disabled={leaveLobbyMutation.isPending}
+                                variant="destructive"
+                            >
+                                <LogOut className="mr-2 h-4 w-4"/>
+                                {leaveLobbyMutation.isPending ? 'Leaving...' : 'Leave Lobby'}
+                            </Button>
+                        )}
+
+                        {isHost && players.length < 2 && (
+                            <p className="text-sm text-red-500 mt-2">
+                                At least 2 players are required to start the game.
+                            </p>
                         )}
                     </div>
                 </CardContent>

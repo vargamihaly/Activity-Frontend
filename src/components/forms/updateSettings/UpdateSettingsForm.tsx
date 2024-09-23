@@ -6,13 +6,16 @@ import { useToast } from '@/hooks/use-toast';
 import { useUpdateSettings } from '@/hooks/gameHooks';
 import MaxScoreField from './MaxScoreField';
 import MethodSelection from './MethodSelection';
-import { MethodType } from '@/interfaces/GameTypes';
 import TimerField from "@/components/forms/updateSettings/TimerField";
+import { components } from "@/api/activitygame-schema";
+import {METHOD_TYPE} from "@/interfaces/GameTypes";
+
+type MethodType = components['schemas']['MethodType'];
 
 const SettingsSchema = Yup.object().shape({
     timer: Yup.number().min(1, 'Timer must be at least 1 minute').required('Timer is required'),
     maxScore: Yup.number().min(1, 'Max score must be at least 1').required('Max score is required'),
-    methods: Yup.array().of(Yup.number()).min(1, 'At least one method must be selected').required('Methods are required'),
+    methods: Yup.array().of(Yup.mixed<MethodType>().oneOf(Object.values(METHOD_TYPE))).min(1, 'At least one method must be selected').required('Methods are required'),
 });
 
 interface UpdateSettingsFormProps {
@@ -37,7 +40,7 @@ const FormikUpdater: React.FC<{ timer: number; maxScore: number; enabledMethods:
                 await Promise.all([
                     setFieldValue('timer', timer || 1),
                     setFieldValue('maxScore', maxScore || 1),
-                    setFieldValue('methods', (enabledMethods || []).map(method => Number(method)))
+                    setFieldValue('methods', enabledMethods || [])
                 ]);
             } catch (error) {
                 console.error('Error updating form fields:', error);
@@ -66,7 +69,7 @@ const UpdateSettingsForm: React.FC<UpdateSettingsFormProps> = ({
             initialValues={{
                 timer: timer || 1,
                 maxScore: maxScore || 1,
-                methods: (enabledMethods || []).map((method) => Number(method)),
+                methods: enabledMethods || [],
             }}
             validationSchema={SettingsSchema}
             onSubmit={async (values, { setSubmitting }) => {
@@ -115,13 +118,13 @@ const UpdateSettingsForm: React.FC<UpdateSettingsFormProps> = ({
                             disabled={isDisabled}
                         />
                         <MethodSelection
-                            methods={values.methods || []}
-                            onToggle={async (method) => {
+                            methods={values.methods}
+                            onToggle={(method: MethodType) => {
                                 if (isDisabled) return;
                                 const newMethods = values.methods.includes(method)
                                     ? values.methods.filter((m) => m !== method)
                                     : [...values.methods, method];
-                                await setFieldValue('methods', newMethods);
+                                setFieldValue('methods', newMethods);
                             }}
                             error={errors.methods as string}
                             touched={touched.methods}

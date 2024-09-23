@@ -5,7 +5,8 @@ import { useGame } from '@/context/GameContext';
 import { Button } from "@/components/ui/button"
 import { LogOut, Home, ArrowLeft } from 'lucide-react'
 import { Toaster } from "@/components/ui/toaster";
-import {GameStatus} from "@/interfaces/GameTypes";
+import {GAME_STATUS} from "@/interfaces/GameTypes";
+
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { user, logout } = useAuth();
@@ -15,7 +16,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
     const handleReturnToGame = () => {
         if (currentGame) {
-            if (currentGame.gameStatus === GameStatus.InProgress) {
+            if (currentGame.status === GAME_STATUS.InProgress) {
                 navigate(`/game/${currentGame.id}`);
             } else {
                 navigate(`/lobby/${currentGame.id}`);
