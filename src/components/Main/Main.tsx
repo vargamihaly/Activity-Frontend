@@ -1,7 +1,7 @@
 import React, {useEffect, useState} from 'react';
 import {useNavigate} from 'react-router-dom';
 import {useAuth} from '@/context/AuthContext';
-import {useCreateGame, useGameDetails, useJoinGame} from "@/hooks/gameHooks";
+import {useCreateGame, useJoinGame, useLeaveLobby} from "@/hooks/gameHooks";
 import {useToast} from "@/hooks/use-toast";
 import GameActionCard from "@/components/Main/GameActionCard";
 import UserLoading from "@/components/Main/UserLoading";
@@ -9,88 +9,85 @@ import JoinGameDialog from "@/components/Main/JoinGameDialog";
 import {useGame} from "@/context/GameContext";
 import {Button} from "@/components/ui/button";
 import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
-import {components} from "@/api/activitygame-schema";
 import {GAME_STATUS} from "@/interfaces/GameTypes";
+import {isValidGuid} from '@/lib/guidUtils';
+
 
 const Main: React.FC = () => {
-    type GameStatus = components["schemas"]["GameStatus"];
-
     const navigate = useNavigate();
     const {user} = useAuth();
     const [joinGameId, setJoinGameId] = useState('');
     const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false);
-    const {currentGame, setCurrentGame, isInGame, setIsInGame} = useGame();
+    const {currentGame, isInGame, refreshGameDetails} = useGame();
     const {toast} = useToast();
 
     const createGameMutation = useCreateGame();
     const joinGameMutation = useJoinGame();
-    const storedGameId = localStorage.getItem('currentGameId') || undefined;
-    const {
-        data: fetchedGameDetails,
-        isLoading: isLoadingGameDetails,
-        error: gameDetailsError,
-        refetch: refetchGameDetails
-    } = useGameDetails(storedGameId, {
-        enabled: !!storedGameId,
-    });
+    const leaveLobbyMutation = useLeaveLobby();
 
-    console.log('Rendering Main component');
-    console.log('User:', user);
-    console.log('Is in game:', isInGame);
-    console.log('Current game:', currentGame);
-
+    // Logging the initial state and context
     useEffect(() => {
-        console.log('useEffect triggered');
-        console.log('Stored game ID:', storedGameId);
-        console.log('Fetched game details:', fetchedGameDetails);
-        if (storedGameId && !currentGame) {
-            if (fetchedGameDetails) {
-                setCurrentGame(fetchedGameDetails);
-                setIsInGame(true);
-            } else if (gameDetailsError) {
-                toast({
-                    title: "Error",
-                    description: "Failed to fetch game details. Please try again.",
-                    variant: "destructive",
-                });
-                localStorage.removeItem('currentGameId');
-            }
-        }
-    }, [storedGameId, currentGame, fetchedGameDetails, gameDetailsError, setCurrentGame, setIsInGame, toast]);
+        console.log('Main component mounted');
+        console.log('User:', user);
+        console.log('Current game:', currentGame);
+        console.log('Is in game:', isInGame);
+    }, [user, currentGame, isInGame]);
 
     const handleCreateGame = () => {
+        console.log('Create game clicked');
         if (isInGame) {
-            const confirmNewGame = window.confirm("You are already in a game. Creating a new game will remove you from the current one. Are you sure you want to continue?");
-            if (!confirmNewGame) return;
+            console.log('Already in a game');
+            let isInLobby = currentGame?.status === GAME_STATUS.Waiting;
+            console.log('Is in lobby:', isInLobby);
+
+            if (isInLobby) {
+                let confirmNewGame = window.confirm("You are already in a lobby. Creating a new game will remove you from the current lobby. Are you sure you want to continue?");
+                console.log('User confirmed new game:', confirmNewGame);
+
+                if (!confirmNewGame) {
+                    return;
+                } else {
+                    console.log('Leaving current lobby...');
+                    leaveLobbyMutation.mutateAsync(currentGame!.id).then(() => {
+                        console.log('Left lobby successfully');
+                    }).catch((error) => {
+                        console.error('Error leaving lobby:', error);
+                    });
+                }
+            } else {
+                console.log('Already in an active game, showing error toast');
+                toast({
+                    title: "Error",
+                    description: "You are already in a game.",
+                    variant: "destructive",
+                });
+                return;
+            }
         }
 
+        console.log('Creating new game...');
         createGameMutation.mutate(undefined, {
             onSuccess: async (response) => {
                 const gameId = response.data?.gameId;
                 console.log('Create game response:', response.data);
                 if (gameId) {
-                    localStorage.setItem('currentGameId', gameId);
-                    const {data: newGameDetails} = await refetchGameDetails();
-                    if (newGameDetails) {
-                        setCurrentGame(newGameDetails);
-                        setIsInGame(true);
-                        navigate(`/lobby/${gameId}`);
-                    }
+                    console.log('Game created successfully, refreshing game details');
+                    refreshGameDetails();
+                    navigate(`/lobby/${gameId}`);
                 }
             },
+            onError: (error) => {
+                console.error('Error creating game:', error);
+            }
         });
-    };
+    }
 
     const handleJoinGame = () => {
-        if (isInGame) {
-            const confirmJoinNewGame = window.confirm("You are already in a game. Joining a new game will remove you from the current one. Are you sure you want to continue?");
-            if (!confirmJoinNewGame) return;
-        }
+        console.log('Join game clicked');
+        let isValid = isValidGuid(joinGameId);
+        console.log('Is valid game ID:', isValid);
 
-        const guidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
-        let isValidGuid = guidRegex.test(joinGameId);
-
-        if (!isValidGuid) {
+        if (!isValid) {
             toast({
                 title: "Error",
                 description: "Please enter a valid game ID",
@@ -99,21 +96,52 @@ const Main: React.FC = () => {
             return;
         }
 
+        if (isInGame) {
+            console.log('Already in a game');
+            let isInLobby = currentGame?.status === GAME_STATUS.Waiting;
+            console.log('Is in lobby:', isInLobby);
+
+            if (isInLobby) {
+                let confirmNewGame = window.confirm("You are already in a lobby. Joining a new game will remove you from the current lobby. Are you sure you want to continue?");
+                console.log('User confirmed joining new game:', confirmNewGame);
+
+                if (!confirmNewGame) {
+                    return;
+                } else {
+                    console.log('Leaving current lobby...');
+                    leaveLobbyMutation.mutateAsync(currentGame!.id).then(() => {
+                        console.log('Left lobby successfully');
+                    }).catch((error) => {
+                        console.error('Error leaving lobby:', error);
+                    });
+                }
+            } else {
+                console.log('Already in an active game, showing error toast');
+                toast({
+                    title: "Error",
+                    description: "You are already in a game.",
+                    variant: "destructive",
+                });
+                return;
+            }
+        }
+
+        console.log('Joining game:', joinGameId);
         joinGameMutation.mutate(joinGameId, {
             onSuccess: async () => {
-                localStorage.setItem('currentGameId', joinGameId);
-                const {data: joinedGameDetails} = await refetchGameDetails();
-                if (joinedGameDetails) {
-                    setCurrentGame(joinedGameDetails);
-                    setIsInGame(true);
-                    navigate(`/lobby/${joinGameId}`);
-                }
+                console.log('Joined game successfully, refreshing game details');
+                refreshGameDetails();
+                navigate(`/lobby/${joinGameId}`);
             },
+            onError: (error) => {
+                console.error('Error joining game:', error);
+            }
         });
-    };
+    }
 
     const handleReturnToGame = () => {
         if (currentGame) {
+            console.log('Returning to game:', currentGame.id);
             if (currentGame.status === GAME_STATUS.InProgress) {
                 navigate(`/game/${currentGame.id}`);
             } else {
@@ -124,20 +152,13 @@ const Main: React.FC = () => {
 
     if (!user) {
         console.log('No user, rendering UserLoading');
-        return <UserLoading/>;
+        return <UserLoading />;
     }
 
-    if (isLoadingGameDetails) {
-        console.log('Loading game details');
-        return <div>Loading game details...</div>;
-    }
-
-    console.log('Rendering main content');
-    console.log('User:', user);
+    console.log('Rendering main content for user:', user);
 
     return (
         <div className="container mx-auto p-4">
-
             <div className="max-w-4xl mx-auto">
                 <h1 className="text-3xl font-bold text-center mb-8">Welcome, {user.username}</h1>
 

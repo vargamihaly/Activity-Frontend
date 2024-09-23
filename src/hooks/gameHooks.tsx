@@ -3,7 +3,15 @@ import { useToast } from "@/hooks/use-toast";
 import { components } from "@/api/activitygame-schema";
 
 import { AxiosError } from "axios";
-import {getGameDetails, postCreateGame, postEndTurn, postStartGame, putGameSettings, postJoinGame} from "@/api/games-api";
+import {
+    getGameDetails,
+    postCreateGame,
+    postEndTurn,
+    postStartGame,
+    putGameSettings,
+    postJoinGame,
+    postLeaveLobby
+} from "@/api/games-api";
 
 const errorMessageTitle = "An error occurred";
 
@@ -63,6 +71,29 @@ export const useUpdateSettings = () => {
     });
 };
 
+export const useLeaveLobby = () => {
+    const queryClient = useQueryClient();
+    const { toast } = useToast();
+
+    return useMutation<ApiResponse, AxiosError<ApiResponse>, string>({
+        mutationFn: postLeaveLobby,
+        onSuccess: async (response, gameId) => {
+            await queryClient.invalidateQueries({
+                queryKey: ['games', gameId]
+            });
+            console.log('Left lobby successfully', response);
+        },
+        onError: (error) => {
+            const errorMessage = error.response?.data?.message || error.message || "An unexpected error occurred while leaving the lobby.";
+            toast({
+                title: "Error Leaving Lobby",
+                description: errorMessage,
+                variant: "destructive"
+            });
+        }
+    });
+};
+
 export const useJoinGame = () => {
     const queryClient = useQueryClient();
     const { toast } = useToast();
@@ -105,6 +136,7 @@ export const useStartGame = () => {
     });
 };
 
+//Should not be called directly for state manage the CURRENT game, use GameContext instead
 export const useGameDetails = (gameId?: string, options = {}) => {
     const { toast } = useToast();
 

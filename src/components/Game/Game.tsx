@@ -2,7 +2,7 @@ import React, {useEffect, useState} from 'react';
 import {useParams, useNavigate} from 'react-router-dom';
 import {useAuth} from '@/context/AuthContext';
 import {useGame} from '@/context/GameContext';
-import {useEndTurn, useGameDetails} from "@/hooks/gameHooks";
+import {useEndTurn} from "@/hooks/gameHooks";
 import {Card, CardContent} from "@/components/ui/card";
 import {Button} from "@/components/ui/button";
 import {Loader2, MessageCircle} from 'lucide-react';
@@ -18,10 +18,9 @@ const Game: React.FC = () => {
     const {gameId} = useParams<{ gameId: string }>();
     const {user} = useAuth();
     const navigate = useNavigate();
-    const {currentGame, setCurrentGame, setIsInGame} = useGame();
+    const {refreshGameDetails, currentGame} = useGame();
     const {toast} = useToast();
     const endTurnMutation = useEndTurn();
-    const {data: gameDetails, refetch: reFetchGameDetails} = useGameDetails(gameId);
     const [selectedWinnerId, setSelectedWinnerId] = useState<string>('');
 
     const {timeLeft, progress, startTimer, resetTimer} = useGameTimer({
@@ -36,8 +35,7 @@ const Game: React.FC = () => {
             title: "Game Over",
             description: "The game has ended! Redirecting to stats page...",
         });
-        setIsInGame(false);
-        setCurrentGame(null);
+        refreshGameDetails();
         navigate(`/game-stats/${gameId}`);
     };
 
@@ -45,23 +43,20 @@ const Game: React.FC = () => {
         console.log('Round ended, resetting timer and selected winner');
         resetTimer();
         setSelectedWinnerId('');
+        refreshGameDetails();
     };
 
-    const {isConnected} = useSSE(gameId, undefined, onGameEnded, onRoundEnded);
+    const {isConnected} = useSSE(gameId, {
+        onGameEnded,
+        onRoundEnded,
+    });
 
     useEffect(() => {
         if (gameId) {
-            reFetchGameDetails();
+            refreshGameDetails();
         }
-    }, [gameId, reFetchGameDetails]);
+    }, [gameId, refreshGameDetails]);
 
-    useEffect(() => {
-        if (gameDetails) {
-            setCurrentGame(gameDetails);
-            resetTimer(gameDetails.timer * 60);
-            startTimer();
-        }
-    }, [gameDetails, setCurrentGame, resetTimer, startTimer]);
 
     const handleEndTurn = async () => {
         if (!selectedWinnerId || !gameId) {
@@ -72,7 +67,7 @@ const Game: React.FC = () => {
             });
             return;
         }
-        
+
         await endTurnMutation.mutateAsync({gameId, request: {winnerUserId: selectedWinnerId}});
         toast({
             title: "Success",
@@ -91,6 +86,7 @@ const Game: React.FC = () => {
     const currentRoundNumber = currentGame.currentRound
         ? (currentGame.currentRound.id.charAt(currentGame.currentRound.id.length - 1) as unknown as number)
         : 0;
+    
     const isActivePlayer = user?.username === currentGame.currentRound?.activePlayerUsername;
 
     return (

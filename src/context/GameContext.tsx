@@ -1,46 +1,57 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useGameDetails } from '@/hooks/gameHooks';
 import {components} from "@/api/activitygame-schema";
+import {useAuth} from "@/context/AuthContext";
 type GetGameDetailsResponse = components['schemas']['GetGameDetailsResponse'];
 
 
 interface GameContextType {
-    currentGame: GetGameDetailsResponse | null;
-    setCurrentGame: (game: GetGameDetailsResponse | null) => void;
-    isInGame: boolean;
-    setIsInGame: (inGame: boolean) => void;
+    readonly currentGame: GetGameDetailsResponse | null;
+    readonly isInGame: boolean;
+    readonly isHost: boolean;
     refreshGameDetails: () => void;
 }
+//TODO decide where to handle host status, here or USerCOntext
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
 
 export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [currentGame, setCurrentGame] = useState<GetGameDetailsResponse | null>(null);
-    const [isInGame, setIsInGame] = useState<boolean>(false);
-
-    const { data: gameDetails, refetch } = useGameDetails(isInGame ? localStorage.getItem('currentGameId') || undefined : undefined);
+    const [gameId, setGameId] = useState<string | undefined>(localStorage.getItem('currentGameId') || undefined);
+    const { user } = useAuth();
+    const { data: gameDetails, refetch } = useGameDetails(gameId);
 
     useEffect(() => {
         const storedGameId = localStorage.getItem('currentGameId');
         if (storedGameId) {
-            setIsInGame(true);
+            setGameId(storedGameId);
         }
     }, []);
 
-    useEffect(() => {
-        if (gameDetails) {
-            setCurrentGame(gameDetails);
-        }
-    }, [gameDetails]);
+    const isInGame = !!gameDetails && !!user && gameDetails.players!.some(player => player.id === user.id);
+    const isHost = !!gameDetails && !!user && gameDetails.host.id === user.id;
 
     const refreshGameDetails = () => {
-        if (isInGame) {
+        if (gameId) {
             refetch();
         }
     };
 
+    useEffect(() => {
+        if (!isInGame && gameId) {
+            localStorage.removeItem('currentGameId');
+            setGameId(undefined);
+        }
+    }, [isInGame, gameId]);
+
+    const contextValue: GameContextType = {
+        currentGame: gameDetails ?? null,
+        isInGame,
+        refreshGameDetails,
+        isHost
+    };
+
     return (
-        <GameContext.Provider value={{ currentGame, setCurrentGame, isInGame, setIsInGame, refreshGameDetails }}>
+        <GameContext.Provider value={contextValue}>
             {children}
         </GameContext.Provider>
     );

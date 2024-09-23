@@ -43,7 +43,8 @@ const API_PATHS = {
     joinGame: '/games/join',
     startGame: '/games/start',
     endTurn: '/games/end-turn',
-    gameSettings: '/games/settings'
+    gameSettings: '/games/settings',
+    leaveLobby: 'games/leave-lobby',
 } as const;
 
 const apiCall = async <T>(method: 'get' | 'post' | 'put', url: string, data?: any): Promise<AxiosResponse<T>> => {
@@ -105,6 +106,12 @@ export const postJoinGame = async (gameId: string): Promise<ApiResponse> => {
 
 export const postStartGame = async (gameId: string): Promise<StartGameResponseApiResponse> => {
     const response = await apiCall<StartGameResponseApiResponse>('post', `${API_PATHS.startGame}/${gameId}`);
+    return response.data;
+};
+
+//postLeaveLobby
+export const postLeaveLobby = async (gameId: string): Promise<ApiResponse> => {
+    const response = await apiCall<ApiResponse>('post', `${API_PATHS.leaveLobby}/${gameId}`);
     return response.data;
 };
 
